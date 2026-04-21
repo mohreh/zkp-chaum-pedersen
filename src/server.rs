@@ -2,9 +2,11 @@ pub mod zkp_auth {
     include!(concat!(env!("OUT_DIR"), "/zkp_auth.rs"));
 }
 
+use num_bigint::BigUint;
 use tokio::sync::Mutex;
 use tonic::{Request, Response, Status};
 use zkp_auth::auth_service_server::{AuthService, AuthServiceServer};
+use zkp_chaum_pedersen::ChaumPedersenParameters;
 
 use crate::zkp_auth::{
     CreateAuthenticationChallengeRequest, CreateAuthenticationChallengeResponse, RegisterRequest,
@@ -31,9 +33,21 @@ struct ActiveSession {
     session_id: String,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct Auth {
+    params: ChaumPedersenParameters,
     users: Arc<Mutex<HashMap<String, UserInfo>>>,
+    pending_challenges: Arc<Mutex<HashMap<String, AuthSession>>>,
+}
+
+impl Default for Auth {
+    fn default() -> Self {
+        Self {
+            params: ChaumPedersenParameters::default(),
+            users: Arc::new(Mutex::new(HashMap::new())),
+            pending_challenges: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
 }
 
 #[tonic::async_trait]
@@ -66,7 +80,35 @@ impl AuthService for Auth {
         &self,
         req: Request<CreateAuthenticationChallengeRequest>,
     ) -> Result<Response<CreateAuthenticationChallengeResponse>, Status> {
-        todo!()
+        log::info!("Processing CreateAuthenticationChallenge: {:?}", req);
+        let req = req.into_inner();
+
+        let user = req.user;
+        let users = &mut self.users.lock().await;
+        if let Some(_) = users.get_mut(&user) {
+            let challenge = zkp_chaum_pedersen::generate_random_nonce(&self.params.subgroup_order);
+            let auth_id = "asdkjfa".to_string();
+
+            let pending_challenges = &mut self.pending_challenges.lock().await;
+            pending_challenges.insert(
+                auth_id.clone(),
+                AuthSession {
+                    commitment_1: req.commitment_1,
+                    commitment_2: req.commitment_2,
+                    challenge: challenge.to_bytes_be(),
+                },
+            );
+
+            return Ok(Response::new(CreateAuthenticationChallengeResponse {
+                auth_id,
+                challenge: challenge.to_bytes_be(),
+            }));
+        }
+
+        Err(Status::not_found(format!(
+            "User: {} not found in database",
+            user
+        )))
     }
 
     async fn verify_authentication(
