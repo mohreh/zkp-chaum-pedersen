@@ -2,9 +2,11 @@ syntax = "proto3";
 package zkp_auth;
 
 /*
- * Prover registers in the server sending:
- * public_value_1 = generator_1 ^ secret_value mod prime_modulus
- * public_value_2 = generator_2 ^ secret_value mod prime_modulus
+ * Phase 1: Registration
+ * The prover registers with the verifier (server) by providing their identity
+ * and their public commitment to a secret value 'x'.
+ * * public_value_1 (y1) = generator_1 ^ secret_value mod prime_modulus
+ * public_value_2 (y2) = generator_2 ^ secret_value mod prime_modulus
  */
 message RegisterRequest {
   string user = 1;
@@ -15,10 +17,13 @@ message RegisterRequest {
 message RegisterResponse {}
 
 /*
- * Prover ask for challenge in the server sending:
- * commitment_1 = generator_1 ^ random_nonce mode prime_modulus
- * commitment_2 = generator_2 ^ random_nonce mode prime_modulus
- * verifier sends the challenge back
+ * Phase 2: Commitment & Challenge
+ * The prover initiates an authentication session by generating a random nonce 'k'
+ * and computing two commitments.
+ * * commitment_1 (r1) = generator_1 ^ random_nonce mod prime_modulus
+ * commitment_2 (r2) = generator_2 ^ random_nonce mod prime_modulus
+ * * The verifier receives these commitments and returns a cryptographically
+ * secure random challenge 'c', along with a unique authentication session ID.
  */
 message CreateAuthenticationChallengeRequest {
   string user = 1;
@@ -32,8 +37,11 @@ message CreateAuthenticationChallengeResponse {
 }
 
 /*
- * Prover sends solution "response = random_nonce - challenge mod subgroup_order" to the challenge
- * Verifier sends the session ID if the the solution is correct
+ * Phase 3: Response & Verification
+ * The prover calculates the response 's' to the challenge using their secret value 'x'.
+ * * response (s) = (random_nonce - challenge * secret_value) mod subgroup_order
+ * * The verifier evaluates the proof using the stored public values and commitments.
+ * If mathematically valid, a session ID (or JWT token) is returned.
  */
 message VerifyAuthenticationRequest {
   string auth_id = 1;
