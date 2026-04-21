@@ -1,0 +1,51 @@
+syntax = "proto3";
+package zkp_auth;
+
+/*
+ * Prover registers in the server sending:
+ * public_value_1 = generator_1 ^ secret_value mod prime_modulus
+ * public_value_2 = generator_2 ^ secret_value mod prime_modulus
+ */
+message RegisterRequest {
+  string user = 1;
+  bytes public_value_1 = 2;
+  bytes public_value_2 = 3;
+}
+
+message RegisterResponse {}
+
+/*
+ * Prover ask for challenge in the server sending:
+ * commitment_1 = generator_1 ^ random_nonce mode prime_modulus
+ * commitment_2 = generator_2 ^ random_nonce mode prime_modulus
+ * verifier sends the challenge back
+ */
+message CreateAuthenticationChallengeRequest {
+  string user = 1;
+  bytes commitment_1 = 2;
+  bytes commitment_2 = 3;
+}
+
+message CreateAuthenticationChallengeResponse {
+  string auth_id = 1;
+  bytes challenge = 2;
+}
+
+/*
+ * Prover sends solution "response = random_nonce - challenge mod subgroup_order" to the challenge
+ * Verifier sends the session ID if the the solution is correct
+ */
+message VerifyAuthenticationRequest {
+  string auth_id = 1;
+  bytes response = 2;
+}
+
+message VerifyAuthenticationResponse {
+  string session_id = 1;
+}
+
+service AuthService {
+  rpc Register(RegisterRequest) returns (RegisterResponse) {}
+  rpc CreateAuthenticationChallenge(CreateAuthenticationChallengeRequest) returns (CreateAuthenticationChallengeResponse) {}
+  rpc VerifyAuthentication(VerifyAuthenticationRequest) returns (VerifyAuthenticationResponse) {}
+}
