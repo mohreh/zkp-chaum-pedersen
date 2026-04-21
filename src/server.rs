@@ -2,6 +2,7 @@ pub mod zkp_auth {
     include!(concat!(env!("OUT_DIR"), "/zkp_auth.rs"));
 }
 
+use tokio::sync::Mutex;
 use tonic::{Request, Response, Status};
 use zkp_auth::auth_service_server::{AuthService, AuthServiceServer};
 
@@ -11,7 +12,29 @@ use crate::zkp_auth::{
 };
 
 #[derive(Debug, Default)]
-struct Auth {}
+pub struct UserInfo {
+    pub user: String,
+    pub public_value_1: Vec<u8>,
+    pub public_value_2: Vec<u8>,
+}
+
+#[derive(Debug, Clone)]
+struct AuthSession {
+    pub commitment_1: Vec<u8>,
+    pub commitment_2: Vec<u8>,
+    pub challenge: Vec<u8>,
+}
+
+#[derive(Debug, Clone)]
+struct ActiveSession {
+    user: String,
+    session_id: String,
+}
+
+#[derive(Debug, Default)]
+struct Auth {
+    users: Arc<Mutex<HashMap<String, UserInfo>>>,
+}
 
 #[tonic::async_trait]
 impl AuthService for Auth {
@@ -19,7 +42,24 @@ impl AuthService for Auth {
         &self,
         req: Request<RegisterRequest>,
     ) -> Result<Response<RegisterResponse>, Status> {
-        todo!()
+        log::info!("Processing Register: {:?}", req);
+
+        let req = req.into_inner();
+
+        let user = req.user;
+        let public_value_1 = req.public_value_1;
+        let public_value_2 = req.public_value_2;
+
+        let user_info = UserInfo {
+            user: user.clone(),
+            public_value_1,
+            public_value_2,
+        };
+
+        let users = &mut self.users.lock().await;
+        users.insert(user, user_info);
+
+        Ok(Response::new(RegisterResponse {}))
     }
 
     async fn create_authentication_challenge(
@@ -37,7 +77,7 @@ impl AuthService for Auth {
     }
 }
 
-use std::env;
+use std::{collections::HashMap, env, sync::Arc};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
