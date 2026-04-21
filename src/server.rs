@@ -1,5 +1,4 @@
 pub mod zkp_auth {
-    // مسیر به فایل تولید شده توسط tonic-build
     include!(concat!(env!("OUT_DIR"), "/zkp_auth.rs"));
 }
 
