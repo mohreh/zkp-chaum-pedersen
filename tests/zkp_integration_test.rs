@@ -1,5 +1,5 @@
 use crypto_bigint::{
-    Encoding, Odd, U1024, U2048,
+    Encoding, Odd, U2048,
     modular::{FixedMontyForm, MontyParams},
 };
 use sha2::{Digest, Sha256};
@@ -270,4 +270,25 @@ fn test_edge_case_zero_secret() {
     );
 
     assert!(is_valid, "Failed to verify proof where the secret is zero.");
+}
+
+#[test]
+fn test_non_interactive_fiat_shamir_proof() {
+    let params = setup_2048_bit_params();
+
+    // 1. Registration phase (Prover generates keys)
+    let secret_value = generate_random_nonce(&params.subgroup_order);
+    let public_value_1 = params.exponentiate(&params.generator_1, &secret_value);
+    let public_value_2 = params.exponentiate(&params.generator_2, &secret_value);
+
+    // 2. Authentication phase (Prover generates NIZK proof offline)
+    let proof = params.prove_non_interactive(&secret_value, &public_value_1, &public_value_2);
+
+    // 3. Verification phase (Verifier strictly checks the single proof payload)
+    let is_valid = params.verify_non_interactive(&public_value_1, &public_value_2, &proof);
+
+    assert!(
+        is_valid,
+        "A valid Non-Interactive Fiat-Shamir proof was rejected!"
+    );
 }

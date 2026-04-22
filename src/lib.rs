@@ -22,6 +22,13 @@ pub struct ChaumPedersenParameters {
     pub generator_2: U2048,
 }
 
+/// A cryptographically secure, non-interactive Zero-Knowledge Proof. This Struct Will be send directly to the verifier.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NonInteractiveProof {
+    pub challenge: U2048,
+    pub response: U2048,
+}
+
 impl ChaumPedersenParameters {
     /// Returns the standard RFC 3526 2048-bit MODP parameters (Group 14).
     /// These parameters are safe primes where p = 2q + 1, widely used in secure communications.
@@ -124,6 +131,102 @@ impl ChaumPedersenParameters {
 
         // Compare values
         *commitment_1 == rhs_1.retrieve() && *commitment_2 == rhs_2.retrieve()
+    }
+
+    /// Fiat-Shamir Heuristic: Deterministically generates a cryptographic challenge
+    /// by hashing the public parameters, public keys, and current commitments.
+    /// This acts as a Random Oracle, removing the need for verifier interaction.
+    pub fn compute_fiat_shamir_challenge(
+        &self,
+        public_value_1: &U2048,
+        public_value_2: &U2048,
+        commitment_1: &U2048,
+        commitment_2: &U2048,
+    ) -> U2048 {
+        let mut hasher = Sha256::new();
+
+        // Hash the generators
+        hasher.update(self.generator_1.to_be_bytes());
+        hasher.update(self.generator_2.to_be_bytes());
+
+        // Hash the public values (y1, y2)
+        hasher.update(public_value_1.to_be_bytes());
+        hasher.update(public_value_2.to_be_bytes());
+
+        // Hash the transient commitments (r1, r2)
+        hasher.update(commitment_1.to_be_bytes());
+        hasher.update(commitment_2.to_be_bytes());
+
+        let hash_result = hasher.finalize();
+
+        // Convert the 256-bit (32-byte) SHA256 output to a U2048.
+        // Since 2^256 is massively smaller than our 2047-bit subgroup order 'q',
+        // this value is inherently reduced modulo q.
+        let mut challenge_bytes = [0u8; 256];
+        challenge_bytes[256 - 32..].copy_from_slice(&hash_result);
+
+        U2048::from_be_bytes(challenge_bytes.into())
+    }
+
+    /// Generates a complete Non-Interactive Zero-Knowledge Proof (NIZK).
+    /// The Prover computes everything locally and returns a single proof struct.
+    pub fn prove_non_interactive(
+        &self,
+        secret_value: &U2048,
+        public_value_1: &U2048,
+        public_value_2: &U2048,
+    ) -> NonInteractiveProof {
+        // 1. Generate random nonce (k)
+        let random_nonce = generate_random_nonce(&self.subgroup_order);
+
+        // 2. Compute commitments (r1, r2)
+        let r1 = self.exponentiate(&self.generator_1, &random_nonce);
+        let r2 = self.exponentiate(&self.generator_2, &random_nonce);
+
+        // 3. Compute Fiat-Shamir challenge (c)
+        let challenge =
+            self.compute_fiat_shamir_challenge(public_value_1, public_value_2, &r1, &r2);
+
+        // 4. Compute response (s = k - c * x mod q)
+        let response = self.compute_response(&random_nonce, &challenge, secret_value);
+
+        NonInteractiveProof {
+            challenge,
+            response,
+        }
+    }
+
+    /// Verifies a Non-Interactive Zero-Knowledge Proof.
+    pub fn verify_non_interactive(
+        &self,
+        public_value_1: &U2048,
+        public_value_2: &U2048,
+        proof: &NonInteractiveProof,
+    ) -> bool {
+        let odd_p = Odd::new(self.prime_modulus).expect("Modulus must be odd");
+        let p_params = MontyParams::new_vartime(odd_p);
+
+        let g1_form = FixedMontyForm::<32>::new(&self.generator_1, &p_params.clone());
+        let g2_form = FixedMontyForm::<32>::new(&self.generator_2, &p_params.clone());
+        let y1_form = FixedMontyForm::<32>::new(public_value_1, &p_params.clone());
+        let y2_form = FixedMontyForm::<32>::new(public_value_2, &p_params);
+
+        // Reconstruct commitments based on the algebraic properties:
+        // r1' = (g1^s * y1^c) mod p
+        let r1_prime = (g1_form.pow(&proof.response) * y1_form.pow(&proof.challenge)).retrieve();
+
+        // r2' = (g2^s * y2^c) mod p
+        let r2_prime = (g2_form.pow(&proof.response) * y2_form.pow(&proof.challenge)).retrieve();
+
+        // Recompute the challenge using the reconstructed commitments
+        let expected_challenge = self.compute_fiat_shamir_challenge(
+            public_value_1,
+            public_value_2,
+            &r1_prime,
+            &r2_prime,
+        );
+
+        proof.challenge == expected_challenge
     }
 }
 
