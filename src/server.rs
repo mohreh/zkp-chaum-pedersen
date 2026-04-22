@@ -179,7 +179,7 @@ impl AuthService for Auth {
 
                 match is_valid {
                     true => {
-                        let session_id = generate_random_string(12);
+                        let session_id = generate_random_string(64);
                         let mut active_sessions = self.active_sessions.lock().await;
                         active_sessions.insert(
                             pending_challenge.user.clone(),
@@ -216,7 +216,7 @@ impl AuthService for Auth {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
 
-    let port = env::var("PORT").unwrap_or_else(|_| "50051".to_string());
+    let port = env::var("SERVER_PORT").unwrap_or_else(|_| "50051".to_string());
     let addr = format!("0.0.0.0:{}", port).parse()?;
     log::info!("🚀 Starting ZKP Auth gRPC server on {}", addr);
 
