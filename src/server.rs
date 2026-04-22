@@ -2,7 +2,6 @@ pub mod zkp_auth {
     include!(concat!(env!("OUT_DIR"), "/zkp_auth.rs"));
 }
 
-use num_bigint::BigUint;
 use tokio::sync::Mutex;
 use tonic::{Request, Response, Status};
 use zkp_auth::auth_service_server::{AuthService, AuthServiceServer};
@@ -95,13 +94,13 @@ impl AuthService for Auth {
                 AuthSession {
                     commitment_1: req.commitment_1,
                     commitment_2: req.commitment_2,
-                    challenge: challenge.to_bytes_be(),
+                    challenge: challenge.to_be_bytes().to_vec(),
                 },
             );
 
             return Ok(Response::new(CreateAuthenticationChallengeResponse {
                 auth_id,
-                challenge: challenge.to_bytes_be(),
+                challenge: challenge.to_be_bytes().to_vec(),
             }));
         }
 
