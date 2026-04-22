@@ -1,3 +1,5 @@
+use std::time::UNIX_EPOCH;
+
 use crypto_bigint::modular::{FixedMontyForm, MontyParams, Retrieve};
 use crypto_bigint::{Encoding, NonZero, Odd, RandomMod, U2048};
 use rand::Rng;
@@ -176,14 +178,14 @@ impl ChaumPedersenParameters {
         public_value_1: &U2048,
         public_value_2: &U2048,
     ) -> NonInteractiveProof {
-        // 1. Generate random nonce (k)
+        // Generate random nonce (k)
         let random_nonce = generate_random_nonce(&self.subgroup_order);
 
-        // 2. Compute commitments (r1, r2)
+        // Compute commitments (r1, r2)
         let r1 = self.exponentiate(&self.generator_1, &random_nonce);
         let r2 = self.exponentiate(&self.generator_2, &random_nonce);
 
-        // 3. Compute Fiat-Shamir challenge (c)
+        // Compute Fiat-Shamir challenge (c)
         let challenge =
             self.compute_fiat_shamir_challenge(public_value_1, public_value_2, &r1, &r2);
 

@@ -8,11 +8,12 @@ use crypto_bigint::{Encoding, U2048};
 use tokio::sync::Mutex;
 use tonic::{Request, Response, Status};
 use zkp_auth::auth_service_server::{AuthService, AuthServiceServer};
-use zkp_chaum_pedersen::{ChaumPedersenParameters, generate_random_string};
+use zkp_chaum_pedersen::{ChaumPedersenParameters, NonInteractiveProof, generate_random_string};
 
 use crate::zkp_auth::{
     CreateAuthenticationChallengeRequest, CreateAuthenticationChallengeResponse, RegisterRequest,
     RegisterResponse, VerifyAuthenticationRequest, VerifyAuthenticationResponse,
+    VerifyNonInteractiveRequest, VerifyNonInteractiveResponse,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -70,7 +71,8 @@ struct AuthSession {
 
 #[derive(Debug, Clone)]
 struct ActiveSession {
-    pub session_id: String,
+    pub user: String,
+    pub created_at: std::time::Instant,
 }
 
 #[derive(Debug)]
@@ -101,13 +103,21 @@ impl AuthService for Auth {
         log::info!("Processing Register: {:?}", req);
 
         let req = req.into_inner();
-        let user = req.user;
+
         let public_value_1 = ZkpBytes::try_from(req.public_value_1.as_slice())?;
         let public_value_2 = ZkpBytes::try_from(req.public_value_2.as_slice())?;
 
-        let users = &mut self.users.lock().await;
+        let mut users = self.users.lock().await;
+
+        if users.contains_key(&req.user) {
+            return Err(Status::already_exists(format!(
+                "User '{}' is already registered.",
+                req.user
+            )));
+        }
+
         users.insert(
-            user,
+            req.user,
             UserInfo {
                 public_value_1,
                 public_value_2,
@@ -162,53 +172,87 @@ impl AuthService for Auth {
         let req = req.into_inner();
         let auth_id = req.auth_id;
 
-        let pending_challenges = self.pending_challenges.lock().await;
-        if let Some(pending_challenge) = pending_challenges.get(&auth_id) {
-            let users = &mut self.users.lock().await;
-            if let Some(user_info) = users.get(&pending_challenge.user) {
-                let resp = ZkpBytes::try_from(req.response.as_slice())?;
+        let pending_challenge = self
+            .pending_challenges
+            .lock()
+            .await
+            .remove(&auth_id)
+            .ok_or_else(|| Status::not_found(format!("AuthID {} not found or expired", auth_id)))?;
 
-                let is_valid = self.params.verify(
-                    &U2048::from(&pending_challenge.commitment_1),
-                    &U2048::from(&pending_challenge.commitment_2),
-                    &U2048::from(&user_info.public_value_1),
-                    &U2048::from(&user_info.public_value_2),
-                    &U2048::from(&pending_challenge.challenge),
-                    &U2048::from(&resp),
-                );
+        let users = &mut self.users.lock().await;
+        let user_info = users
+            .get(&pending_challenge.user)
+            .ok_or_else(|| Status::internal("User data corrupted"))?;
 
-                match is_valid {
-                    true => {
-                        let session_id = generate_random_string(64);
-                        let mut active_sessions = self.active_sessions.lock().await;
-                        active_sessions.insert(
-                            pending_challenge.user.clone(),
-                            ActiveSession {
-                                session_id: session_id.clone(),
-                            },
-                        );
+        let resp = ZkpBytes::try_from(req.response.as_slice())?;
 
-                        return Ok(Response::new(VerifyAuthenticationResponse { session_id }));
-                    }
-                    false => {
-                        return Err(Status::permission_denied(format!(
-                            "AuthId: {} - Invalid zero-knowledge proof response",
-                            auth_id,
-                        )));
-                    }
-                }
-            } else {
-                return Err(Status::not_found(format!(
-                    "UserId: {} not found for AuthId: {} in database",
-                    pending_challenge.user, auth_id
-                )));
-            }
+        let is_valid = self.params.verify(
+            &U2048::from(&pending_challenge.commitment_1),
+            &U2048::from(&pending_challenge.commitment_2),
+            &U2048::from(&user_info.public_value_1),
+            &U2048::from(&user_info.public_value_2),
+            &U2048::from(&pending_challenge.challenge),
+            &U2048::from(&resp),
+        );
+        if is_valid {
+            let session_id = generate_random_string(32);
+            self.active_sessions.lock().await.insert(
+                session_id.clone(),
+                ActiveSession {
+                    user: pending_challenge.user,
+                    created_at: std::time::Instant::now(),
+                },
+            );
+            return Ok(Response::new(VerifyAuthenticationResponse { session_id }));
         }
 
-        Err(Status::not_found(format!(
-            "AuthId: {} not found in database",
-            auth_id
+        Err(Status::permission_denied(format!(
+            "AuthId: {} - Invalid zero-knowledge proof response",
+            auth_id,
         )))
+    }
+
+    async fn verify_non_interactive(
+        &self,
+        req: Request<VerifyNonInteractiveRequest>,
+    ) -> Result<Response<VerifyNonInteractiveResponse>, Status> {
+        let req = req.into_inner();
+        let username = req.user;
+
+        let challenge_bytes = ZkpBytes::try_from(req.challenge.as_slice())?;
+        let response_bytes = ZkpBytes::try_from(req.response.as_slice())?;
+
+        let users = self.users.lock().await;
+        let user_info = users
+            .get(&username)
+            .ok_or_else(|| Status::not_found("User not found"))?;
+
+        let proof = NonInteractiveProof {
+            challenge: (&challenge_bytes).into(),
+            response: (&response_bytes).into(),
+        };
+
+        let is_valid = self.params.verify_non_interactive(
+            &(&user_info.public_value_1).into(),
+            &(&user_info.public_value_2).into(),
+            &proof,
+        );
+
+        if is_valid {
+            let session_id = generate_random_string(32);
+            self.active_sessions.lock().await.insert(
+                session_id.clone(),
+                ActiveSession {
+                    user: username.clone(),
+                    created_at: std::time::Instant::now(),
+                },
+            );
+            log::info!("Non-interactive login successful: {}", username);
+            return Ok(Response::new(VerifyNonInteractiveResponse { session_id }));
+        }
+        Err(Status::permission_denied(
+            "Invalid Non-interactive ZKP proof",
+        ))
     }
 }
 

@@ -52,8 +52,23 @@ message VerifyAuthenticationResponse {
   string session_id = 1;
 }
 
+/*
+ * Non-Interactive ZKP Login (Fiat-Shamir)
+ * Prover computes everything locally and sends the final proof in one single request.
+ */
+message VerifyNonInteractiveRequest {
+  string user = 1;
+  bytes challenge = 2; // The Fiat-Shamir challenge computed by the client
+  bytes response = 3;  // The response computed by the client
+}
+
+message VerifyNonInteractiveResponse {
+    string session_id = 1;
+}
+
 service AuthService {
   rpc Register(RegisterRequest) returns (RegisterResponse) {}
   rpc CreateAuthenticationChallenge(CreateAuthenticationChallengeRequest) returns (CreateAuthenticationChallengeResponse) {}
   rpc VerifyAuthentication(VerifyAuthenticationRequest) returns (VerifyAuthenticationResponse) {}
+  rpc VerifyNonInteractive(VerifyNonInteractiveRequest) returns (VerifyNonInteractiveResponse) {}
 }
