@@ -1,4 +1,7 @@
+use std::collections;
+
 use num_bigint::{BigUint, RandBigInt};
+use rand::Rng;
 
 /// Public parameters for the Chaum-Pedersen Zero-Knowledge Proof (ZKP) protocol.
 /// This protocol proves the equality of discrete logarithms: log_g1(y1) == log_g2(y2) == x,
@@ -110,4 +113,21 @@ impl Default for ChaumPedersenParameters {
 pub fn generate_random_nonce(bound: &BigUint) -> BigUint {
     let mut rng = rand::thread_rng();
     rng.gen_biguint_below(bound)
+}
+
+/// Generates a cryptographically secure random alphanumeric string of a specified length.
+///
+/// # Arguments
+///
+/// * `size` - The desired length of the random string.
+///
+/// # Returns
+///
+/// A `String` containing randomly selected alphanumeric characters (A-Z, a-z, 0-9).
+pub fn generate_random_string(size: usize) -> String {
+    rand::thread_rng()
+        .sample_iter(&rand::distributions::Alphanumeric)
+        .take(size)
+        .map(char::from)
+        .collect()
 }

@@ -6,7 +6,7 @@ use num_bigint::BigUint;
 use tokio::sync::Mutex;
 use tonic::{Request, Response, Status};
 use zkp_auth::auth_service_server::{AuthService, AuthServiceServer};
-use zkp_chaum_pedersen::ChaumPedersenParameters;
+use zkp_chaum_pedersen::{ChaumPedersenParameters, generate_random_string};
 
 use crate::zkp_auth::{
     CreateAuthenticationChallengeRequest, CreateAuthenticationChallengeResponse, RegisterRequest,
@@ -87,7 +87,7 @@ impl AuthService for Auth {
         let users = &mut self.users.lock().await;
         if let Some(_) = users.get_mut(&user) {
             let challenge = zkp_chaum_pedersen::generate_random_nonce(&self.params.subgroup_order);
-            let auth_id = "asdkjfa".to_string();
+            let auth_id = generate_random_string(10);
 
             let pending_challenges = &mut self.pending_challenges.lock().await;
             pending_challenges.insert(
