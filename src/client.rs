@@ -336,7 +336,7 @@ where
                     }
                     Focus::Password => " Type Password. Press [ENTER] to confirm credentials. ",
                     Focus::CommandMode => {
-                        " COMMANDS: [R] Register | [I] Interactive Login | [F] Fiat-Shamir Non-Interactive Login | [C] Clear Data | [E] Erase Chat | [ESC] Quit "
+                        " COMMANDS: [R] Register | [I] Interactive Login | [F] Fiat-Shamir Non-Interactive Login | [C] Clear Data | [ESC] Quit "
                     }
                     Focus::Processing => " ⏳ Processing Cryptography... Please wait. ",
                 }
@@ -422,9 +422,6 @@ where
                             KeyCode::Char('c') | KeyCode::Char('C') => {
                                 app.username_input.reset();
                                 app.password_input.reset();
-                                app.focus = Focus::Username;
-                            }
-                            KeyCode::Char('e') | KeyCode::Char('E') => {
                                 app.focus = Focus::Username;
                             }
                             _ => {}

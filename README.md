@@ -1,4 +1,79 @@
 
+# ZKP-Auth: Zero-Knowledge Authentication System
+
+A implementation of the **Chaum-Pedersen Zero-Knowledge Proof (ZKP)** protocol. This system allows a prover (client) to prove knowledge of a secret (password) to a verifier (server) without ever revealing the secret itself, nor sending any sensitive data over the network.
+
+## 🚀 Features
+ * **Protocol**: Implements the Chaum-Pedersen protocol for proving the equality of discrete logarithms.
+ * **Modes**:
+   * **Interactive**: 3-pass protocol (Commitment, Challenge, Response).
+   * **Non-Interactive**: 1-pass protocol using the **Fiat-Shamir Heuristic**.
+ * **Security**:
+   * **Constant-Time Arithmetic**: Built with crypto-bigint (cosidering side-channel timing attacks, maybe best-practice in real-world).
+   * **Key Derivation**: Uses **Argon2id** (memory-hard) and **HKDF** to derive the *secret x* from human passwords.
+   * **Standard Parameters**: Uses **RFC 3526 (Group 14)** 2048-bit Safe Prime MODP groups.
+   * **Replay Protection**: Challenges are consumed upon use in the server's state machine.
+ * **Interface**: Simple Terminal User Interface (TUI) built with ratatui and crossterm for showcasing (I use tokio::time:sleep just for showcasing the protocol and it's steps).
+ * **Communication**: High-performance asynchronous gRPC API using tonic and prost.
+ 
+## 🏗️ Mathematical Overview
+The system proves that \log_{g_1}(y_1) = \log_{g_2}(y_2) = x without revealing x.
+
+### 1. Setup & Registration
+The client derives a secret x \in \mathbb{Z}_q from their password and registers the public values:
+
+### 2. The Proof (Interactive)
+ 1. **Commitment**: Client picks random k \in \mathbb{Z}_q and sends r_1 = g_1^k, r_2 = g_2^k.
+ 2. **Challenge**: Server sends random c \in \mathbb{Z}_q.
+ 3. **Response**: Client sends s = (k - c \cdot x) \pmod q.
+ 4. **Verification**: Server checks:
+
+### 3. Non-Interactive (Fiat-Shamir)
+The client computes the challenge c locally as a hash of the parameters and commitments:
+c = \text{Hash}(g_1, g_2, y_1, y_2, r_1, r_2)
+
+## 🛠️ Project Structure
+ * lib.rs: The core cryptographic library (Parameters, Exponentiation, Verification Logic).
+ * server.rs: The gRPC server managing user registration and authentication states.
+ * client.rs: The TUI-based client handling KDF derivation and ZKP generation.
+ * zkp_auth.proto: Protobuf definitions for the gRPC service.
+ 
+## 🚦 Getting Started
+
+### Prerequisites
+ * **Rust**: Latest stable version.
+ * **Protobuf Compiler**: Required by tonic-build (protoc).
+   * Ubuntu: ```sudo apt install protobuf-compiler```
+   * macOS: ```brew install protobuf```
+   
+### Running the System
+1. **Start the Server**:
+```bash
+# Set the port (optional, defaults to 50051)
+export SERVER_PORT=50051
+cargo run --bin server
+```
+   
+2. **Run the Client**:
+```bash
+cargo run --bin client
+```
+   
+## 🎮 How to Use the CLI
+ 1. **Navigation**: Use [TAB] to switch between the **Username** and **Password** fields.
+ 2. **Input**: Type your credentials. The password will be masked with *.
+ 3. **Commands**:
+   * Press [R] to **Register** (one-time setup).
+   * Press [I] for **Interactive Login** (standard 3-step proof).
+   * Press [F] for **Fiat-Shamir Login** (fast 1-step proof).
+   * Press [L] to **Logout** once authenticated.
+   * Press [ESC] to Quit.
+## 🛡️ Security Implementation Details
+ * **RFC 3526 Group 14**: A 2048-bit MODP group with a safe prime p = 2q + 1. This ensures that the subgroup order q is prime and provides 112 bits of security against the discrete log problem.
+ * **State Handling**: The server uses a HashMap protected by a Mutex to track PendingChallenges. To prevent **Replay Attacks**, challenges are removed from the map immediately upon the first verification attempt.
+ * **KDF**: Passwords are not directly used as x. Instead, **Argon2id** processes the password with a salt (derived from the username) to produce a 256-bit key, which is then expanded to 2048-bits via **HKDF** and reduced modulo q.
+ #### *“Knowledge is the only treasure that can be proven without being shared.”*
+
 ## The Problem on 2048-bit parameters based on the **RFC 5114** 
 
 ### Documentation: Resolving RFC 5114 Parameter Mismatch in Chaum-Pedersen ZKP Implementation
@@ -24,7 +99,7 @@ fn setup_2048_bit_params() -> ChaumPedersenParameters {
 ```
 
 ```text
-thread 'test_valid_proof_2048_bit' panicked at tests/zkp_integration_test.rs:104:5:
+thread 'test_valid_proof_2048_bit' panicked at tests/zkp_integration_test.rs::
 A valid 2048-bit Chaum-Pedersen proof was incorrectly rejected.
 ```
 
