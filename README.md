@@ -1,6 +1,8 @@
 
 # ZKP-Auth: Zero-Knowledge Authentication System
 
+## *“Knowledge is the only treasure that can be proven without being shared.”*
+
 A implementation of the **Chaum-Pedersen Zero-Knowledge Proof (ZKP)** protocol. This system allows a prover (client) to prove knowledge of a secret (password) to a verifier (server) without ever revealing the secret itself, nor sending any sensitive data over the network.
 
 ## 🚀 Features
@@ -17,20 +19,21 @@ A implementation of the **Chaum-Pedersen Zero-Knowledge Proof (ZKP)** protocol. 
  * **Communication**: High-performance asynchronous gRPC API using tonic and prost.
  
 ## 🏗️ Mathematical Overview
-The system proves that \log_{g_1}(y_1) = \log_{g_2}(y_2) = x without revealing x.
+The system proves that $\log_{g_1}(y_1) = \log_{g_2}(y_2) = x$ without revealing x.
 
 ### 1. Setup & Registration
-The client derives a secret x \in \mathbb{Z}_q from their password and registers the public values:
+The client derives a secret $x \in \mathbb{Z}_q$ from their password and registers the public values:
 
 ### 2. The Proof (Interactive)
- 1. **Commitment**: Client picks random k \in \mathbb{Z}_q and sends r_1 = g_1^k, r_2 = g_2^k.
- 2. **Challenge**: Server sends random c \in \mathbb{Z}_q.
- 3. **Response**: Client sends s = (k - c \cdot x) \pmod q.
- 4. **Verification**: Server checks:
-
+ 1. **Commitment**: Client picks random $k \in \mathbb{Z}_q$ and sends $r_1 = g_1^k$, $r_2 = g_2^k$.
+ 2. **Challenge**: Server sends random $c \in \mathbb{Z}_q$.
+ 3. **Response**: Client sends $s = (k - c \cdot x) \pmod q$.
+ 4. **Verification**: The server verifies the proof by checking:
+$$g_1^s \cdot y_1^c \equiv r_1 \pmod p$$
+$$g_2^s \cdot y_2^c \equiv r_2 \pmod p$$
 ### 3. Non-Interactive (Fiat-Shamir)
 The client computes the challenge c locally as a hash of the parameters and commitments:
-c = \text{Hash}(g_1, g_2, y_1, y_2, r_1, r_2)
+$c = \text{Hash}(g_1, g_2, y_1, y_2, r_1, r_2)$
 
 ## 🛠️ Project Structure
  * lib.rs: The core cryptographic library (Parameters, Exponentiation, Verification Logic).
@@ -69,10 +72,9 @@ cargo run --bin client
    * Press [L] to **Logout** once authenticated.
    * Press [ESC] to Quit.
 ## 🛡️ Security Implementation Details
- * **RFC 3526 Group 14**: A 2048-bit MODP group with a safe prime p = 2q + 1. This ensures that the subgroup order q is prime and provides 112 bits of security against the discrete log problem.
+ * **RFC 3526 Group 14**: A 2048-bit MODP group with a safe prime $p = 2q + 1$. This ensures that the subgroup order q is prime and provides 112 bits of security against the discrete log problem.
  * **State Handling**: The server uses a HashMap protected by a Mutex to track PendingChallenges. To prevent **Replay Attacks**, challenges are removed from the map immediately upon the first verification attempt.
  * **KDF**: Passwords are not directly used as x. Instead, **Argon2id** processes the password with a salt (derived from the username) to produce a 256-bit key, which is then expanded to 2048-bits via **HKDF** and reduced modulo q.
- #### *“Knowledge is the only treasure that can be proven without being shared.”*
 
 ## The Problem on 2048-bit parameters based on the **RFC 5114** 
 
