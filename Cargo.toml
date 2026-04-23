@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 argon2 = "0.5.3"
+crossterm = "0.29.0"
 crypto-bigint = { version = "0.7.3", features = ["rand_core", "zeroize"] }
 env_logger = "0.11.10"
 hex = "0.4.3"
@@ -13,10 +14,12 @@ log = "0.4.29"
 prost = "0.14.3"
 rand = "0.10.1"
 rand_core = "0.10.1"
+ratatui = "0.30.0"
 sha2 = "0.11.0"
 tokio = { version = "1.52.1", features = ["rt-multi-thread", "macros"] }
 tonic = "0.14.5"
 tonic-prost = "0.14.5"
+tui-input = "0.15.3"
 
 [build-dependencies]
 tonic-prost-build = "0.14.5"
